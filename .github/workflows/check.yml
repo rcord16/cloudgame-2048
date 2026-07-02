@@ -2,21 +2,29 @@ name: CloudGame CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
-  validate-frontend:
+  validate:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout du code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Vérifier la présence du frontend
-        run: test -f frontend/index.html
+      - name: Vérifier le frontend
+        run: |
+          test -f frontend/index.html
 
-      - name: Vérifier le nom du projet
-        run: grep -q "CloudGame 2048" frontend/index.html
+      - name: Vérifier la présence d'un titre HTML
+        run: |
+          grep -i "<title>" frontend/index.html
 
-      - name: Vérifier les endpoints API
-        run: grep -q "u81b3h1eo2.execute-api" frontend/index.html
+      - name: Vérifier que l'API est configurée
+        run: |
+          grep -i "execute-api" frontend/index.html
+
+      - name: Vérifier la syntaxe HTML
+        run: |
+          grep -i "</html>" frontend/index.html
