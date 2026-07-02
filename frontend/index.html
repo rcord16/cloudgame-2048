@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CloudPaste</title>
+<style>
+body{font-family:Arial;background:#f5f5f5;margin:40px;}
+.container{max-width:800px;margin:auto;background:white;padding:30px;border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,.1);}
+button{background:#ff9900;color:white;border:none;padding:10px 20px;cursor:pointer;}
+table{width:100%;margin-top:20px;border-collapse:collapse;}
+td,th{border:1px solid #ddd;padding:10px;}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>CloudPaste</h1>
+
+<input type="file" id="file">
+<button onclick="uploadFile()">Uploader</button>
+
+<hr>
+<button onclick="loadFiles()">Actualiser</button>
+
+<table>
+<thead>
+<tr>
+<th>Nom</th>
+<th>Date</th>
+<th>Télécharger</th>
+<th>Supprimer</th>
+</tr>
+</thead>
+<tbody id="files"></tbody>
+</table>
+</div>
+
+<script>
+const API="https://i4e50rxtob.execute-api.us-east-1.amazonaws.com/prod";
+
+async function uploadFile(){
+  const file=document.getElementById("file").files[0];
+  if(!file){
+    alert("Choisis un fichier.");
+    return;
+  }
+
+  const reader=new FileReader();
+
+  reader.onload=async function(){
+    const base64=reader.result.split(",")[1];
+
+    await fetch(API+"/upload",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        filename:file.name,
+        content:base64
+      })
+    });
+
+    loadFiles();
+  };
+
+  reader.readAsDataURL(file);
+}
+
+async function loadFiles(){
+  const response=await fetch(API+"/files");
+  const data=await response.json();
+
+  const files = data.body ? JSON.parse(data.body) : data;
+
+  const table=document.getElementById("files");
+  table.innerHTML="";
+
+  files.forEach(file=>{
+    table.innerHTML+=`
+      <tr>
+        <td>${file.filename}</td>
+        <td>${file.uploadDate}</td>
+        <td><button onclick="downloadFile('${file.fileId}')">Télécharger</button></td>
+        <td><button onclick="deleteFile('${file.fileId}')">Supprimer</button></td>
+      </tr>
+    `;
+  });
+}
+
+async function downloadFile(id){
+  const response=await fetch(API+"/download/"+id);
+  const data=await response.json();
+
+  const result = data.body ? JSON.parse(data.body) : data;
+
+  window.open(result.url,"_blank");
+}
+
+async function deleteFile(id){
+  await fetch(API+"/file/"+id,{method:"DELETE"});
+  loadFiles();
+}
+
+loadFiles();
+</script>
+</body>
+</html>
