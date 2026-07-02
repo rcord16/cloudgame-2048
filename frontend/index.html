@@ -2,104 +2,245 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>CloudPaste</title>
+<title>CloudGame 2048 V2</title>
+
 <style>
-body{font-family:Arial;background:#f5f5f5;margin:40px;}
-.container{max-width:800px;margin:auto;background:white;padding:30px;border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,.1);}
-button{background:#ff9900;color:white;border:none;padding:10px 20px;cursor:pointer;}
-table{width:100%;margin-top:20px;border-collapse:collapse;}
-td,th{border:1px solid #ddd;padding:10px;}
+body{
+  font-family:Arial, sans-serif;
+  background:#f4f6f8;
+  margin:0;
+  padding:40px;
+}
+
+.container{
+  max-width:1100px;
+  margin:auto;
+}
+
+.header{
+  background:white;
+  padding:25px;
+  border-radius:14px;
+  box-shadow:0 4px 14px rgba(0,0,0,.08);
+  margin-bottom:25px;
+}
+
+h1{
+  margin:0 0 10px;
+}
+
+button{
+  border:none;
+  padding:10px 16px;
+  cursor:pointer;
+  border-radius:7px;
+  font-weight:bold;
+  margin:4px;
+}
+
+button:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+.create{
+  background:#ff9900;
+  color:white;
+}
+
+.refresh{
+  background:#555;
+  color:white;
+}
+
+.play{
+  background:#1673ff;
+  color:white;
+}
+
+.stop{
+  background:#d13212;
+  color:white;
+}
+
+.delete{
+  background:#444;
+  color:white;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+  gap:20px;
+}
+
+.card{
+  background:white;
+  padding:22px;
+  border-radius:14px;
+  box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
+
+.status{
+  font-weight:bold;
+  margin:10px 0;
+}
+
+.url{
+  font-size:13px;
+  color:#555;
+  word-break:break-all;
+}
+
+.empty{
+  background:white;
+  padding:25px;
+  border-radius:14px;
+  box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
 </style>
 </head>
+
 <body>
+
 <div class="container">
-<h1>CloudPaste V2</h1>
 
-<input type="file" id="file">
-<button onclick="uploadFile()">Uploader</button>
+  <div class="header">
+    <h1>🎮 CloudGame 2048</h1>
+    <p>Plateforme de création de serveurs de jeux à la demande sur AWS.</p>
+    <p><strong id="count">0</strong> serveur(s) provisionné(s)</p>
 
-<hr>
-<button onclick="loadFiles()">Actualiser</button>
+    <button class="create" onclick="createServer()">Créer un serveur</button>
+    <button class="refresh" onclick="loadServers()">Actualiser</button>
+  </div>
 
-<table>
-<thead>
-<tr>
-<th>Nom</th>
-<th>Date</th>
-<th>Télécharger</th>
-<th>Supprimer</th>
-</tr>
-</thead>
-<tbody id="files"></tbody>
-</table>
+  <div id="servers" class="grid"></div>
+
 </div>
 
 <script>
-const API="https://i4e50rxtob.execute-api.us-east-1.amazonaws.com/prod";
+const API = "https://u81b3h1eo2.execute-api.us-east-1.amazonaws.com/prod";
 
-async function uploadFile(){
-  const file=document.getElementById("file").files[0];
-  if(!file){
-    alert("Choisis un fichier.");
+function getContainerName(server){
+  return server.containerName || server.name;
+}
+
+async function createServer(){
+  await fetch(API + "/server", { method:"POST" });
+  await loadServers();
+}
+
+async function loadServers(){
+  const response = await fetch(API + "/servers");
+  const data = await response.json();
+  const servers = data.body ? JSON.parse(data.body) : data;
+
+  document.getElementById("count").innerText = servers.length;
+
+  const container = document.getElementById("servers");
+  container.innerHTML = "";
+
+  if(servers.length === 0){
+    container.innerHTML = `
+      <div class="empty">
+        Aucun serveur créé pour le moment.
+      </div>
+    `;
     return;
   }
 
-  const reader=new FileReader();
+  servers.forEach(server => {
+    const containerName = getContainerName(server);
+    const isValidContainer = containerName && containerName.startsWith("game2048-");
+    const running = server.status === "RUNNING";
+    const icon = running ? "🟢" : "🔴";
+    const label = running ? "RUNNING" : "STOPPED";
+    const playText = running ? "Jouer" : "Démarrer & jouer";
 
-  reader.onload=async function(){
-    const base64=reader.result.split(",")[1];
+    container.innerHTML += `
+      <div class="card">
+        <h2>🎲 ${containerName || "Serveur inconnu"}</h2>
 
-    await fetch(API+"/upload",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        filename:file.name,
-        content:base64
-      })
-    });
+        <div class="status">${icon} ${label}</div>
 
-    loadFiles();
-  };
+        <p><strong>Jeu :</strong> ${server.game || "2048"}</p>
+        <p><strong>Port :</strong> ${server.port || "Non défini"}</p>
+        <p class="url">${server.url || "URL non disponible"}</p>
 
-  reader.readAsDataURL(file);
-}
+        <button class="play"
+          onclick="playServer('${containerName}', '${server.url}', '${server.status}')"
+          ${isValidContainer && server.url ? "" : "disabled"}>
+          ${playText}
+        </button>
 
-async function loadFiles(){
-  const response=await fetch(API+"/files");
-  const data=await response.json();
+        <button class="stop"
+          onclick="stopContainer('${containerName}')"
+          ${isValidContainer && running ? "" : "disabled"}>
+          Arrêter
+        </button>
 
-  const files = data.body ? JSON.parse(data.body) : data;
-
-  const table=document.getElementById("files");
-  table.innerHTML="";
-
-  files.forEach(file=>{
-    table.innerHTML+=`
-      <tr>
-        <td>${file.filename}</td>
-        <td>${file.uploadDate}</td>
-        <td><button onclick="downloadFile('${file.fileId}')">Télécharger</button></td>
-        <td><button onclick="deleteFile('${file.fileId}')">Supprimer</button></td>
-      </tr>
+        <button class="delete"
+          onclick="deleteContainer('${containerName}')"
+          ${isValidContainer ? "" : "disabled"}>
+          Supprimer
+        </button>
+      </div>
     `;
   });
 }
 
-async function downloadFile(id){
-  const response=await fetch(API+"/download/"+id);
-  const data=await response.json();
+async function playServer(name, url, status){
+  if(!name || name === "undefined"){
+    alert("Nom du conteneur introuvable.");
+    return;
+  }
 
-  const result = data.body ? JSON.parse(data.body) : data;
+  if(status === "STOPPED"){
+    await fetch(API + "/server/start/" + encodeURIComponent(name), {
+      method:"POST"
+    });
 
-  window.open(result.url,"_blank");
+    await loadServers();
+
+    setTimeout(() => {
+      window.open(url, "_blank");
+    }, 1500);
+  } else {
+    window.open(url, "_blank");
+  }
 }
 
-async function deleteFile(id){
-  await fetch(API+"/file/"+id,{method:"DELETE"});
-  loadFiles();
+async function stopContainer(name){
+  if(!name || name === "undefined"){
+    alert("Nom du conteneur introuvable.");
+    return;
+  }
+
+  await fetch(API + "/server/stop/" + encodeURIComponent(name), {
+    method:"POST"
+  });
+
+  await loadServers();
 }
 
-loadFiles();
+async function deleteContainer(name){
+  if(!name || name === "undefined"){
+    alert("Nom du conteneur introuvable.");
+    return;
+  }
+
+  if(!confirm("Supprimer ce serveur ?")) return;
+
+  await fetch(API + "/server/delete/" + encodeURIComponent(name), {
+    method:"DELETE"
+  });
+
+  await loadServers();
+}
+
+loadServers();
+setInterval(loadServers, 5000);
 </script>
+
 </body>
 </html>
